@@ -1,0 +1,46 @@
+image: docker:stable
+
+stages:
+  - docker-build
+  - project-build
+  - project-deploy
+
+.only_semver_tagged: &only_semver_tagged
+  only:
+    - /^v\d+\.\d+\.\d+(-rc(\d)+)?$/
+
+docker-build:
+  # <<: *only_semver_tagged
+  stage: docker-build
+  services:
+    - docker:dind
+  before_script:
+    - docker info
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+  script:
+    - docker build -t disckup:latest .
+    - docker tag disckup:latest alefsenamulticast/disckup:latest
+    - docker push alefsenamulticast/disckup:latest
+
+project-build:
+  # <<: *only_semver_tagged
+  image: alefsenamulticast/disckup:latest
+  stage: project-build
+  dependencies:
+  - docker-build
+  script:
+  - npm install
+
+project-deploy:
+  # <<: *only_semver_tagged
+  stage: project-deploy
+  services:
+    - docker:dind
+  dependencies:
+  - project-build
+  when: manual
+  script:
+  - docker info
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+  - docker pull alefsenamulticast/disckup:latest
+  - docker run -e CLIENT_TOKEN=$CLIENT_TOKEN -e CLIENT_ID=$CLIENT_ID -e GUILD_ID=$GUILD_ID -e CLICKUP_API_URL=$CLICKUP_API_URL alefsenamulticast/disckup:latest
